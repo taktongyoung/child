@@ -1,0 +1,59 @@
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+provider      = "prisma-client-js"
+binaryTargets = ["native", "windows", "debian-openssl-3.0.x"]
+}
+
+model Student {
+  id            Int         @id @default(autoincrement())
+  name          String
+  birthDate     DateTime?
+  birthYear     Int?        // 생년 추가
+  className     String
+  teacher       String      // 담임선생님 이름
+  phone         String      // 전화번호 중복 허용
+  address       String
+  photoUrl      String?
+  notes         String?
+  attendance    Attendance[]
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  // 인덱스 추가
+  @@index([name])
+  @@index([className])
+  @@index([className, name])
+}
+
+model Attendance {
+  id        Int      @id @default(autoincrement())
+  date      DateTime
+  status    String   // "present", "absent", "late"
+  student   Student  @relation(fields: [studentId], references: [id])
+  studentId Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  comment   String?
+
+  // 출석 조회 최적화를 위한 인덱스
+  @@index([studentId, date])
+  @@index([date])
+}
+
+model SmsHistory {
+  id          Int      @id @default(autoincrement())
+  recipients  Int      // 수신인수
+  title       String?  // SMS 제목 (LMS의 경우)
+  content     String   // SMS 내용
+  msgType     String   // "SMS" 또는 "LMS"
+  requestNo   String?  // API 요청번호
+  status      String   // "success" 또는 "failed"
+  sentAt      DateTime @default(now())
+
+  // 이력 조회 최적화를 위한 인덱스
+  @@index([sentAt])
+}

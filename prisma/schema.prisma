@@ -1,0 +1,177 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+provider      = "prisma-client-js"
+binaryTargets = ["native", "windows", "debian-openssl-3.0.x"]
+}
+
+model Student {
+  id              Int              @id @default(autoincrement())
+  name            String
+  username        String?          @unique // 로그인 아이디 (이름 기반)
+  password        String?          // 비밀번호 (해시)
+  birthDate       DateTime?
+  birthYear       Int?             // 생년 추가
+  className       String
+  teacher         String           // 담임선생님 이름
+  phone           String           // 전화번호 중복 허용
+  address         String
+  photoUrl        String?
+  notes           String?
+  talents         Int              @default(0) // 보유 달란트
+  attendance      Attendance[]
+  talentHistory   TalentHistory[]
+  purchases       Purchase[]
+  weeklyActivities WeeklyActivity[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  // 인덱스 추가
+  @@index([name])
+  @@index([className])
+  @@index([className, name])
+  @@index([username])
+}
+
+model Teacher {
+  id            Int                    @id @default(autoincrement())
+  name          String                 // 선생님 이름
+  username      String                 @unique // 로그인 아이디
+  password      String                 // 비밀번호 (해시)
+  className     String                 // 담당 반 (예: "유년부1반")
+  phone         String?                // 전화번호
+  email         String?                // 이메일
+  talents       Int                    @default(0) // 보유 달란트
+  talentHistory TeacherTalentHistory[]
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+
+  @@index([username])
+  @@index([className])
+}
+
+model TeacherTalentHistory {
+  id            Int      @id @default(autoincrement())
+  teacher       Teacher  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  teacherId     Int
+  amount        Int      // 변경 금액 (양수: 지급, 음수: 차감)
+  beforeBalance Int      // 변경 전 잔액
+  afterBalance  Int      // 변경 후 잔액
+  reason        String   // 사유 ("출석 체크", "수동 조정", 등)
+  type          String   // "attendance", "manual"
+  createdAt     DateTime @default(now())
+
+  @@index([teacherId, createdAt])
+  @@index([createdAt])
+}
+
+model Admin {
+  id        Int      @id @default(autoincrement())
+  username  String   @unique // 로그인 아이디
+  password  String   // 비밀번호 (해시)
+  name      String   // 관리자 이름
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([username])
+}
+
+model Attendance {
+  id        Int      @id @default(autoincrement())
+  date      DateTime
+  status    String   // "present", "absent", "late"
+  student   Student  @relation(fields: [studentId], references: [id])
+  studentId Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  comment   String?
+
+  // 출석 조회 최적화를 위한 인덱스
+  @@index([studentId, date])
+  @@index([date])
+}
+
+model SmsHistory {
+  id          Int      @id @default(autoincrement())
+  recipients  Int      // 수신인수
+  title       String?  // SMS 제목 (LMS의 경우)
+  content     String   // SMS 내용
+  msgType     String   // "SMS" 또는 "LMS"
+  requestNo   String?  // API 요청번호
+  status      String   // "success" 또는 "failed"
+  sentAt      DateTime @default(now())
+
+  // 이력 조회 최적화를 위한 인덱스
+  @@index([sentAt])
+}
+
+model TalentHistory {
+  id            Int      @id @default(autoincrement())
+  student       Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  studentId     Int
+  amount        Int      // 변경 금액 (양수: 지급, 음수: 차감)
+  beforeBalance Int      // 변경 전 잔액
+  afterBalance  Int      // 변경 후 잔액
+  reason        String   // 사유 ("출석", "수동 조정", 등)
+  type          String   // "attendance", "manual", "delete", "purchase"
+  createdAt     DateTime @default(now())
+
+  // 조회 최적화를 위한 인덱스
+  @@index([studentId, createdAt])
+  @@index([createdAt])
+}
+
+model Product {
+  id          Int        @id @default(autoincrement())
+  name        String     // 상품명
+  description String     @db.Text // 상품 설명
+  price       Int        // 달란트 가격
+  category    String     @default("생활용품") // 카테고리 (운동용품, 장난감, 학용품, 식품, 생활용품)
+  imageUrl    String?    // 상품 이미지
+  stock       Int        @default(0) // 재고
+  isAvailable Boolean    @default(true) // 판매 가능 여부
+  purchases   Purchase[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([isAvailable])
+  @@index([createdAt])
+  @@index([category])
+}
+
+model Purchase {
+  id           Int      @id @default(autoincrement())
+  student      Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  studentId    Int
+  product      Product  @relation(fields: [productId], references: [id])
+  productId    Int
+  quantity     Int      @default(1) // 구매 수량
+  totalPrice   Int      // 총 가격
+  requirements String?  @db.Text // 구매 요구사항 (색상, 사이즈 등)
+  status       String   @default("completed") // "completed", "cancelled"
+  createdAt    DateTime @default(now())
+
+  @@index([studentId, createdAt])
+  @@index([productId])
+  @@index([createdAt])
+}
+
+model WeeklyActivity {
+  id        Int      @id @default(autoincrement())
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  studentId Int
+  date      DateTime // 해당 주의 일요일 날짜
+  bible     Boolean  @default(false) // 성경
+  recitation Boolean @default(false) // 암송
+  qt        Boolean  @default(false) // 큐티
+  phone     Boolean  @default(false) // 휴대폰
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([studentId, date]) // 학생당 주별로 하나의 레코드
+  @@index([date])
+  @@index([studentId, date])
+}
